@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,9 +7,6 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
     <!-- Chosen Palette: Warm Neutral Harmony -->
     <!-- Application Structure Plan: The application is designed as an interactive dashboard, a structure chosen for its superiority in managing dynamic data over a static table. It features four key areas: 1) Summary Cards for a quick, high-level overview of task progress. 2) A Donut Chart for a clear visual breakdown of tasks by status. 3) An Interactive Task List with filtering controls, allowing users to drill down into the data. 4) An "Add Task" form to make the planner a living document. This task-oriented design supports a user flow of 'Assess -> Analyze -> Act', which is highly effective for project management and significantly improves usability compared to the original static report. -->
     <!-- Visualization & Content Choices: 
@@ -48,6 +43,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
             font-weight: 600;
             text-align: center;
         }
+        .status-not-started { background-color: #E2E8F0; color: #4A5568; }
         .status-in-progress { background-color: #C3DAFE; color: #2A69AC; }
         .status-done { background-color: #BEE3F8; color: #2C5282; }
         .status-blocked { background-color: #FED7D7; color: #9B2C2C; }
@@ -101,12 +97,6 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
                 <h3 class="text-sm font-medium text-gray-500">Planned Stories</h3>
                 <p id="planned-stories-tasks" class="text-3xl font-bold text-red-600 mt-2">0</p>
             </div>
-        </section>
-
-        <section class="mb-8 p-4 bg-gray-100 rounded-lg text-sm text-gray-700">
-            <p class="font-semibold">Your User ID (Share this with your team):</p>
-            <p id="user-id-display" class="break-all font-mono mt-1"></p>
-            <p class="mt-2 text-xs text-gray-500">This dashboard is now collaborative! Any changes you make will be saved and visible to others in your group.</p>
         </section>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -226,358 +216,346 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    <script>
+        try {
+            document.addEventListener('DOMContentLoaded', () => {
+                const initialTasks = [
+                    { id: 1, person: 'Dan', task: 'Draft the introduction for the report', status: 'Planned Stories', dueDate: '2025-09-08', notes: 'Find relevant sources in the shared folder.' },
+                    { id: 2, person: 'Johanna', task: 'Create the data visualization charts', status: 'In Progress', dueDate: '2025-09-09', notes: 'Need to finalize the color palette.' },
+                    { id: 3, person: 'John', task: 'Proofread the conclusion section', status: 'Planned Stories', dueDate: '2025-09-10', notes: 'Conclusion draft will be ready on Tuesday.' },
+                    { id: 4, person: 'Marcus', task: 'Finalize the presentation deck', status: 'Done', dueDate: '2025-09-11', notes: 'Everything has been approved.' },
+                    { id: 5, person: 'David', task: 'Schedule a team meeting for next week', status: 'In Progress', dueDate: '2025-09-07', notes: 'Sent a poll to find a good time.' },
+                    { id: 6, person: 'Dan', task: 'Outline Q3 marketing plan', status: 'Planned Stories', dueDate: '2025-09-20', notes: 'Initial brainstorm with the team.' },
+                    { id: 7, person: 'Johanna', task: 'Research new software tools', status: 'Planned Stories', dueDate: '2025-09-22', notes: 'Looking for tools to improve collaboration.' },
+                    { id: 8, person: 'David', task: 'Plan team off-site', status: 'Planned Stories', dueDate: '2025-10-15', notes: 'Need to book a venue and activities for the Q4 off-site.' },
+                    { id: 9, person: 'Marcus', task: 'Develop product roadmap', status: 'Planned Stories', dueDate: '2025-10-31', notes: 'Focus on key features for next quarter.' },
+                    { id: 10, person: 'Dan', task: 'Review new design mockups', status: 'In Progress', dueDate: '2025-10-10', notes: 'Provide feedback to the design team.' },
+                ];
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-            
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-            let userId = null;
-            let tasks = [];
-            let statusChart;
-            const statuses = ['In Progress', 'Done', 'Planned Stories'];
-            const predefinedPeople = ['Dan', 'Johanna', 'John', 'Marcus', 'David'];
+                let tasks = [...initialTasks];
+                let statusChart;
+                const statuses = ['In Progress', 'Done', 'Planned Stories'];
 
-            const tableBody = document.getElementById('task-table-body');
-            const personFilter = document.getElementById('person-filter');
-            const statusFilter = document.getElementById('status-filter');
-            const addTaskForm = document.getElementById('add-task-form');
-            const addPersonSelect = document.getElementById('person');
-            const weeklyViewButton = document.getElementById('weekly-view');
-            const monthlyViewButton = document.getElementById('monthly-view');
-            const weeklyViewSection = document.getElementById('weekly-view-section');
-            const monthlyViewSection = document.getElementById('monthly-view-section');
-            const monthDisplay = document.getElementById('month-display');
-            const prevMonthButton = document.getElementById('prev-month');
-            const nextMonthButton = document.getElementById('next-month');
-            const deleteModal = document.getElementById('delete-modal');
-            const confirmDeleteButton = document.getElementById('confirm-delete');
-            const cancelDeleteButton = document.getElementById('cancel-delete');
-            const userIdDisplay = document.getElementById('user-id-display');
-            
-            let currentView = 'weekly';
-            let currentMonth = new Date().getMonth();
-            let currentYear = new Date().getFullYear();
-            let taskIdToDelete = null;
+                const tableBody = document.getElementById('task-table-body');
+                const personFilter = document.getElementById('person-filter');
+                const statusFilter = document.getElementById('status-filter');
+                const addTaskForm = document.getElementById('add-task-form');
+                const addPersonSelect = document.getElementById('person');
+                const weeklyViewButton = document.getElementById('weekly-view');
+                const monthlyViewButton = document.getElementById('monthly-view');
+                const weeklyViewSection = document.getElementById('weekly-view-section');
+                const monthlyViewSection = document.getElementById('monthly-view-section');
+                const monthDisplay = document.getElementById('month-display');
+                const prevMonthButton = document.getElementById('prev-month');
+                const nextMonthButton = document.getElementById('next-month');
+                const deleteModal = document.getElementById('delete-modal');
+                const confirmDeleteButton = document.getElementById('confirm-delete');
+                const cancelDeleteButton = document.getElementById('cancel-delete');
+                
+                let currentView = 'weekly';
+                let currentMonth = new Date().getMonth();
+                let currentYear = new Date().getFullYear();
+                let taskIdToDelete = null;
 
-            const statusColors = {
-                'In Progress': '#C3DAFE',
-                'Done': '#BEE3F8',
-                'Planned Stories': '#FED7D7',
-            };
-            
-            const statusTextColors = {
-                'In Progress': '#2A69AC',
-                'Done': '#2C5282',
-                'Planned Stories': '#9B2C2C',
-            };
-
-            function getStatusBadge(status) {
-                const statusClassMap = {
-                    'In Progress': 'status-in-progress',
-                    'Done': 'status-done',
-                    'Planned Stories': 'status-blocked',
+                const statusColors = {
+                    'In Progress': '#C3DAFE',
+                    'Done': '#BEE3F8',
+                    'Planned Stories': '#FED7D7',
                 };
-                return `<span class="status-badge ${statusClassMap[status] || ''}">${status}</span>`;
-            }
+                
+                const statusTextColors = {
+                    'In Progress': '#2A69AC',
+                    'Done': '#2C5282',
+                    'Planned Stories': '#9B2C2C',
+                };
 
-            function getStartOfWeek(date) {
-                const d = new Date(date);
-                const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-                return new Date(d.setDate(diff));
-            }
-
-            function getEndOfWeek(date) {
-                const startOfWeek = getStartOfWeek(date);
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(startOfWeek.getDate() + 6);
-                return endOfWeek;
-            }
-
-            function filterTasks() {
-                if (currentView === 'weekly') {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const startOfWeek = getStartOfWeek(today);
-                    const endOfWeek = getEndOfWeek(today);
-                    return tasks.filter(task => {
-                        const taskEventDate = task.dueDate.toDate();
-                        return taskEventDate >= startOfWeek && taskEventDate <= endOfWeek;
-                    });
-                } else if (currentView === 'monthly') {
-                    const monthStart = new Date(currentYear, currentMonth, 1);
-                    const monthEnd = new Date(currentYear, currentMonth + 1, 0);
-                    return tasks.filter(task => {
-                        const taskEventDate = task.dueDate.toDate();
-                        return taskEventDate >= monthStart && taskEventDate <= monthEnd;
-                    });
+                function getStatusBadge(status) {
+                    const statusClassMap = {
+                        'Not Started': 'status-not-started', // Keeping this for backward compatibility in case old tasks remain.
+                        'In Progress': 'status-in-progress',
+                        'Done': 'status-done',
+                        'Planned Stories': 'status-blocked',
+                    };
+                    return `<span class="status-badge ${statusClassMap[status] || ''}">${status}</span>`;
                 }
-                return tasks;
-            }
 
-            function updateSummary() {
-                const filteredTasks = filterTasks();
-                document.getElementById('total-tasks').textContent = tasks.length;
-                document.getElementById('in-progress-tasks').textContent = filteredTasks.filter(t => t.status === 'In Progress').length;
-                document.getElementById('done-tasks').textContent = filteredTasks.filter(t => t.status === 'Done').length;
-                document.getElementById('planned-stories-tasks').textContent = filteredTasks.filter(t => t.status === 'Planned Stories').length;
-            }
+                function getStartOfWeek(date) {
+                    const d = new Date(date);
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                    return new Date(d.setDate(diff));
+                }
 
-            function updateChart() {
-                const filteredTasks = filterTasks();
-                const statusCounts = filteredTasks.reduce((acc, task) => {
-                    acc[task.status] = (acc[task.status] || 0) + 1;
-                    return acc;
-                }, {});
+                function getEndOfWeek(date) {
+                    const startOfWeek = getStartOfWeek(date);
+                    const endOfWeek = new Date(startOfWeek);
+                    endOfWeek.setDate(startOfWeek.getDate() + 6);
+                    return endOfWeek;
+                }
 
-                const chartLabels = Object.keys(statusCounts);
-                const chartData = Object.values(statusCounts);
-                const backgroundColors = chartLabels.map(label => statusColors[label] || '#CCCCCC');
+                function filterTasks() {
+                    if (currentView === 'weekly') {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const startOfWeek = getStartOfWeek(today);
+                        const endOfWeek = getEndOfWeek(today);
+                        return tasks.filter(task => {
+                            const taskEventDate = new Date(task.dueDate + 'T00:00:00');
+                            return taskEventDate >= startOfWeek && taskEventDate <= endOfWeek;
+                        });
+                    } else if (currentView === 'monthly') {
+                        const monthStart = new Date(currentYear, currentMonth, 1);
+                        const monthEnd = new Date(currentYear, currentMonth + 1, 0);
+                        return tasks.filter(task => {
+                            const taskEventDate = new Date(task.dueDate + 'T00:00:00');
+                            return taskEventDate >= monthStart && taskEventDate <= monthEnd;
+                        });
+                    }
+                    return tasks;
+                }
 
-                if (statusChart) {
-                    statusChart.data.labels = chartLabels;
-                    statusChart.data.datasets[0].data = chartData;
-                    statusChart.data.datasets[0].backgroundColor = backgroundColors;
-                    statusChart.update();
-                } else {
-                    const ctx = document.getElementById('statusChart').getContext('2d');
-                    statusChart = new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: chartLabels,
-                            datasets: [{
-                                data: chartData,
-                                backgroundColor: backgroundColors,
-                                borderColor: '#FDFBF8',
-                                borderWidth: 4,
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            let label = context.label || '';
-                                            if (label) {
-                                                label += ': ';
+                function updateSummary() {
+                    const filteredTasks = filterTasks();
+                    document.getElementById('total-tasks').textContent = tasks.length;
+                    document.getElementById('in-progress-tasks').textContent = filteredTasks.filter(t => t.status === 'In Progress').length;
+                    document.getElementById('done-tasks').textContent = filteredTasks.filter(t => t.status === 'Done').length;
+                    document.getElementById('planned-stories-tasks').textContent = filteredTasks.filter(t => t.status === 'Planned Stories').length;
+                }
+
+                function updateChart() {
+                    const filteredTasks = filterTasks();
+                    const statusCounts = filteredTasks.reduce((acc, task) => {
+                        acc[task.status] = (acc[task.status] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    const chartLabels = Object.keys(statusCounts);
+                    const chartData = Object.values(statusCounts);
+                    const backgroundColors = chartLabels.map(label => statusColors[label] || '#CCCCCC');
+
+                    if (statusChart) {
+                        statusChart.data.labels = chartLabels;
+                        statusChart.data.datasets[0].data = chartData;
+                        statusChart.data.datasets[0].backgroundColor = backgroundColors;
+                        statusChart.update();
+                    } else {
+                        const ctx = document.getElementById('statusChart').getContext('2d');
+                        statusChart = new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: chartLabels,
+                                datasets: [{
+                                    data: chartData,
+                                    backgroundColor: backgroundColors,
+                                    borderColor: '#FDFBF8',
+                                    borderWidth: 4,
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                let label = context.label || '';
+                                                if (label) {
+                                                    label += ': ';
+                                                }
+                                                if (context.parsed !== null) {
+                                                    label += context.parsed;
+                                                }
+                                                return label;
                                             }
-                                            if (context.parsed !== null) {
-                                                label += context.parsed;
-                                            }
-                                            return label;
                                         }
                                     }
                                 }
                             }
-                        }
+                        });
+                    }
+                }
+
+                function renderTable() {
+                    const filteredTasks = filterTasks();
+                    const person = personFilter.value;
+                    const status = statusFilter.value;
+
+                    const finalFilteredTasks = filteredTasks.filter(task => 
+                        (person === 'all' || task.person === person) &&
+                        (status === 'all' || task.status === status)
+                    );
+
+                    tableBody.innerHTML = '';
+                    if (finalFilteredTasks.length === 0) {
+                         tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No tasks match the current filters.</td></tr>`;
+                         return;
+                    }
+                    
+                    finalFilteredTasks.forEach(task => {
+                        const row = document.createElement('tr');
+                        row.className = 'bg-white border-b';
+                        row.dataset.taskId = task.id;
+                        row.innerHTML = `
+                            <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${task.person}</td>
+                            <td class="px-6 py-4">${task.task}</td>
+                            <td class="px-6 py-4"><span class="cursor-pointer" data-task-id="${task.id}">${getStatusBadge(task.status)}</span></td>
+                            <td class="px-6 py-4">${new Date(task.dueDate + 'T00:00:00').toLocaleDateString()}</td>
+                            <td class="px-6 py-4">${task.notes}</td>
+                            <td class="px-6 py-4">
+                                <span class="delete-btn" data-task-id="${task.id}">&#x2715;</span>
+                            </td>
+                        `;
+                        tableBody.appendChild(row);
                     });
                 }
-            }
 
-            function renderTable() {
-                const filteredTasks = filterTasks();
-                const person = personFilter.value;
-                const status = statusFilter.value;
-
-                const finalFilteredTasks = filteredTasks.filter(task => 
-                    (person === 'all' || task.person === person) &&
-                    (status === 'all' || task.status === status)
-                );
-
-                tableBody.innerHTML = '';
-                if (finalFilteredTasks.length === 0) {
-                     tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No tasks match the current filters.</td></tr>`;
-                     return;
-                }
-                
-                finalFilteredTasks.forEach(task => {
-                    const row = document.createElement('tr');
-                    row.className = 'bg-white border-b';
-                    row.dataset.docId = task.id;
-                    const eventDate = task.dueDate ? task.dueDate.toDate().toLocaleDateString() : 'N/A';
-                    row.innerHTML = `
-                        <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${task.person}</td>
-                        <td class="px-6 py-4">${task.task}</td>
-                        <td class="px-6 py-4"><span class="cursor-pointer" data-doc-id="${task.id}">${getStatusBadge(task.status)}</span></td>
-                        <td class="px-6 py-4">${eventDate}</td>
-                        <td class="px-6 py-4">${task.notes}</td>
-                        <td class="px-6 py-4">
-                            <span class="delete-btn" data-doc-id="${task.id}">&#x2715;</span>
-                        </td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-            }
-
-            function populateFilters() {
-                const existingPeople = tasks.map(task => task.person);
-                const allPeople = [...new Set([...predefinedPeople, ...existingPeople])].sort();
-                personFilter.innerHTML = '<option value="all">Filter by Person (All)</option>';
-                addPersonSelect.innerHTML = '<option value="">Select a person</option>';
-                allPeople.forEach(person => {
-                    const option1 = document.createElement('option');
-                    option1.value = person;
-                    option1.textContent = person;
-                    personFilter.appendChild(option1);
-                    
-                    const option2 = document.createElement('option');
-                    option2.value = person;
-                    option2.textContent = person;
-                    addPersonSelect.appendChild(option2);
-                });
-            }
-
-            async function handleAddTask(e) {
-                e.preventDefault();
-                const form = e.target;
-                const newTask = {
-                    person: form.person.value.trim(),
-                    task: form.task.value.trim(),
-                    status: form['status-add'].value,
-                    dueDate: new Date(form['event-date'].value),
-                    notes: form.notes.value.trim()
-                };
-
-                await addDoc(collection(db, `artifacts/${appId}/public/data/tasks`), newTask);
-
-                form.reset();
-                document.getElementById('person').focus();
-            }
-            
-            async function handleStatusToggle(e) {
-                const target = e.target.closest('.status-badge');
-                if (!target) return;
-                
-                const docId = target.closest('[data-doc-id]').dataset.docId;
-                const taskIndex = tasks.findIndex(t => t.id == docId);
-                
-                if (taskIndex > -1) {
-                    const currentStatus = tasks[taskIndex].status;
-                    const statusIndex = statuses.indexOf(currentStatus);
-                    const nextStatusIndex = (statusIndex + 1) % statuses.length;
-                    
-                    const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, docId);
-                    await updateDoc(taskRef, {
-                        status: statuses[nextStatusIndex]
+                function populateFilters() {
+                    const people = [...new Set(tasks.map(task => task.person))].sort();
+                    personFilter.innerHTML = '<option value="all">Filter by Person (All)</option>';
+                    addPersonSelect.innerHTML = '<option value="">Select a person</option>';
+                    people.forEach(person => {
+                        const option1 = document.createElement('option');
+                        option1.value = person;
+                        option1.textContent = person;
+                        personFilter.appendChild(option1);
+                        
+                        const option2 = document.createElement('option');
+                        option2.value = person;
+                        option2.textContent = person;
+                        addPersonSelect.appendChild(option2);
                     });
                 }
-            }
 
-            function handleDelete(e) {
-                const target = e.target.closest('.delete-btn');
-                if (!target) return;
+                function handleAddTask(e) {
+                    e.preventDefault();
+                    const form = e.target;
+                    const newTask = {
+                        id: tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1,
+                        person: form.person.value.trim(),
+                        task: form.task.value.trim(),
+                        status: form['status-add'].value,
+                        dueDate: form['event-date'].value,
+                        notes: form.notes.value.trim()
+                    };
 
-                taskIdToDelete = target.dataset.docId;
-                deleteModal.style.display = 'flex';
-            }
+                    tasks.push(newTask);
+                    form.reset();
+                    document.getElementById('person').focus();
 
-            async function confirmDelete() {
-                if (taskIdToDelete !== null) {
-                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskIdToDelete));
-                    taskIdToDelete = null;
-                    hideModal();
+                    fullUpdate();
+                    populateFilters(); 
                 }
-            }
-
-            function hideModal() {
-                deleteModal.style.display = 'none';
-            }
-
-
-            function fullUpdate() {
-                updateSummary();
-                updateChart();
-                renderTable();
-            }
-
-            function updateMonthDisplay() {
-                const date = new Date(currentYear, currentMonth);
-                monthDisplay.textContent = date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-            }
-
-            function showView(view) {
-                weeklyViewSection.classList.add('hidden');
-                monthlyViewSection.classList.add('hidden');
-                if (view === 'weekly') {
-                    weeklyViewSection.classList.remove('hidden');
-                    weeklyViewButton.classList.add('bg-gray-200');
-                    monthlyViewButton.classList.remove('bg-gray-200');
-                    currentView = 'weekly';
-                } else if (view === 'monthly') {
-                    monthlyViewSection.classList.remove('hidden');
-                    monthlyViewButton.classList.add('bg-gray-200');
-                    weeklyViewButton.classList.remove('bg-gray-200');
-                    currentView = 'monthly';
+                
+                function handleStatusToggle(e) {
+                    const target = e.target.closest('.status-badge');
+                    if (!target) return;
+                    
+                    const taskId = target.closest('[data-task-id]').dataset.taskId;
+                    const taskIndex = tasks.findIndex(t => t.id == taskId);
+                    
+                    if (taskIndex > -1) {
+                        const currentStatus = tasks[taskIndex].status;
+                        const statusIndex = statuses.indexOf(currentStatus);
+                        const nextStatusIndex = (statusIndex + 1) % statuses.length;
+                        tasks[taskIndex].status = statuses[nextStatusIndex];
+                        fullUpdate();
+                    }
                 }
-                fullUpdate();
-            }
 
-            function setupRealtimeListener() {
-                const tasksCol = collection(db, `artifacts/${appId}/public/data/tasks`);
-                onSnapshot(tasksCol, (snapshot) => {
-                    tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    populateFilters();
+                function handleDelete(e) {
+                    const target = e.target.closest('.delete-btn');
+                    if (!target) return;
+
+                    taskIdToDelete = target.dataset.taskId;
+                    deleteModal.style.display = 'flex';
+                }
+
+                function confirmDelete() {
+                    if (taskIdToDelete !== null) {
+                        tasks = tasks.filter(t => t.id != taskIdToDelete);
+                        taskIdToDelete = null;
+                        hideModal();
+                        fullUpdate();
+                        populateFilters();
+                    }
+                }
+
+                function hideModal() {
+                    deleteModal.style.display = 'none';
+                }
+
+
+                function fullUpdate() {
+                    updateSummary();
+                    updateChart();
+                    renderTable();
+                }
+
+                function updateMonthDisplay() {
+                    const date = new Date(currentYear, currentMonth);
+                    monthDisplay.textContent = date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                }
+
+                function showView(view) {
+                    weeklyViewSection.classList.add('hidden');
+                    monthlyViewSection.classList.add('hidden');
+                    if (view === 'weekly') {
+                        weeklyViewSection.classList.remove('hidden');
+                        weeklyViewButton.classList.add('bg-gray-200');
+                        monthlyViewButton.classList.remove('bg-gray-200');
+                        currentView = 'weekly';
+                    } else if (view === 'monthly') {
+                        monthlyViewSection.classList.remove('hidden');
+                        monthlyViewButton.classList.add('bg-gray-200');
+                        weeklyViewButton.classList.remove('bg-gray-200');
+                        currentView = 'monthly';
+                    }
+                    fullUpdate();
+                }
+                
+                weeklyViewButton.addEventListener('click', () => showView('weekly'));
+                monthlyViewButton.addEventListener('click', () => showView('monthly'));
+                prevMonthButton.addEventListener('click', () => {
+                    currentMonth--;
+                    if (currentMonth < 0) {
+                        currentMonth = 11;
+                        currentYear--;
+                    }
+                    updateMonthDisplay();
                     fullUpdate();
                 });
-            }
-            
-            weeklyViewButton.addEventListener('click', () => showView('weekly'));
-            monthlyViewButton.addEventListener('click', () => showView('monthly'));
-            prevMonthButton.addEventListener('click', () => {
-                currentMonth--;
-                if (currentMonth < 0) {
-                    currentMonth = 11;
-                    currentYear--;
-                }
-                updateMonthDisplay();
-                fullUpdate();
-            });
-            nextMonthButton.addEventListener('click', () => {
-                currentMonth++;
-                if (currentMonth > 11) {
-                    currentMonth = 0;
-                    currentYear++;
-                }
-                updateMonthDisplay();
-                fullUpdate();
-            });
+                nextMonthButton.addEventListener('click', () => {
+                    currentMonth++;
+                    if (currentMonth > 11) {
+                        currentMonth = 0;
+                        currentYear++;
+                    }
+                    updateMonthDisplay();
+                    fullUpdate();
+                });
 
-            personFilter.addEventListener('change', renderTable);
-            statusFilter.addEventListener('change', renderTable);
-            addTaskForm.addEventListener('submit', handleAddTask);
-            tableBody.addEventListener('click', handleStatusToggle);
-            tableBody.addEventListener('click', handleDelete);
-            confirmDeleteButton.addEventListener('click', confirmDelete);
-            cancelDeleteButton.addEventListener('click', hideModal);
-
-            async function init() {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                userId = auth.currentUser.uid;
-                userIdDisplay.textContent = userId;
-                setupRealtimeListener();
+                personFilter.addEventListener('change', renderTable);
+                statusFilter.addEventListener('change', renderTable);
+                addTaskForm.addEventListener('submit', handleAddTask);
+                tableBody.addEventListener('click', handleStatusToggle);
+                tableBody.addEventListener('click', handleDelete);
+                confirmDeleteButton.addEventListener('click', confirmDelete);
+                cancelDeleteButton.addEventListener('click', hideModal);
+                
                 updateMonthDisplay();
                 showView('weekly');
-            }
-            
-            init();
-        });
+                populateFilters();
+            });
+        } catch (error) {
+            console.error("An error occurred in the script:", error);
+            document.body.innerHTML = `<div class="p-8 text-center text-red-600">
+                <h1 class="text-2xl font-bold">Error Loading Application</h1>
+                <p class="mt-4">It looks like something went wrong. Please check your browser's developer console for more details.</p>
+            </div>`;
+        }
     </script>
 </body>
 </html>
